@@ -1,0 +1,6 @@
+0.2
+Now checks if the transcode command exists before trying it
+Checks transcode/torrent exit code
+
+0.1
+Initial version
