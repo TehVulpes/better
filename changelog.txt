@@ -1,3 +1,7 @@
+0.3
+Checks transcoded files to see if they exist
+ffmpeg error messages are printed on nonzero exit code
+
 0.2
 Now checks if the transcode command exists before trying it
 Checks transcode/torrent exit code
