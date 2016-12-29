@@ -48,7 +48,7 @@ torrent_command = None
 # replacements are as follows:
 # {0}: The input file (*.flac)
 # {1}: The output file (*.mp3 or *.m4a)
-ffmpeg = 'ffmpeg -loglevel quiet '
+ffmpeg = 'ffmpeg '
 transcode_commands = {
     'alac': ffmpeg + '-i {0} -acodec alac {1}',
     '320': ffmpeg + '-i {0} -acodec libmp3lame -ab 320k {1}',
@@ -186,6 +186,8 @@ def transcode_files(src, dst, files, command, extension):
             if threads[i] is None or threads[i].poll() is not None:
                 if threads[i] is not None and threads[i].poll() != 0:
                     print('Error transcoding, process exited with code {}'.format(threads[i].poll()))
+                    print('stderr output...')
+                    print(str(threads[i].communicate()[1], encoding='UTF-8'))
 
                 threads[i] = None
 
@@ -195,7 +197,7 @@ def transcode_files(src, dst, files, command, extension):
                     transcoded.append(dst + '/' + file[:file.rfind('.') + 1] + extension)
                     threads[i] = subprocess.Popen(
                         format_command(command, src + '/' + file, transcoded[-1]), stdin=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True
+                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, shell=True
                     )
                     print('Transcoding {} ({} remaining)'.format(file, len(remaining)))
             else:
