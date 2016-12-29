@@ -84,7 +84,7 @@ LOSSLESS_EXT = {'flac', 'wav', 'm4a'}
 LOSSY_EXT = {'mp3', 'aac'}
 
 # The version number
-__version__ = '0.2'
+__version__ = '0.3'
 
 exit_code = 0
 FILE_NOT_FOUND = 1 << 0
@@ -96,6 +96,7 @@ UNKNOWN_TRANSCODE = 1 << 5
 NO_ANNOUNCE_URL = 1 << 6
 NO_TRANSCODER = 1 << 7
 TORRENT_ERROR = 1 << 8
+TRANSCODE_ERROR = 1 << 9
 
 
 def enumerate_contents(directory):
@@ -171,7 +172,9 @@ def make_torrent(directory, output, announce_url):
 
 
 def transcode_files(src, dst, files, command, extension):
-    files = files[:]
+    global exit_code
+    remaining = files[:]
+    transcoded = []
     threads = [None] * multiprocessing.cpu_count()
 
     transcoding = True
@@ -186,18 +189,27 @@ def transcode_files(src, dst, files, command, extension):
 
                 threads[i] = None
 
-                if len(files) > 0:
+                if len(remaining) > 0:
                     transcoding = True
-                    file = files.pop()
+                    file = remaining.pop()
+                    transcoded.append(dst + '/' + file[:file.rfind('.') + 1] + extension)
                     threads[i] = subprocess.Popen(
-                        format_command(command, src + '/' + file, dst + '/' + file[:file.rfind('.') + 1] + extension),
-                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True
+                        format_command(command, src + '/' + file, transcoded[-1]), stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True
                     )
-                    print('Transcoding {} ({} remaining)'.format(file, len(files)))
+                    print('Transcoding {} ({} remaining)'.format(file, len(remaining)))
             else:
                 transcoding = True
 
         time.sleep(0.05)
+
+    for file in transcoded:
+        if not os.path.isfile(file):
+            print('An error occurred and {} was not created'.format(file))
+            exit_code |= TRANSCODE_ERROR
+        elif os.path.getsize(file) == 0:
+            print('An error occurred and {} is empty'.format(file))
+            exit_code |= TRANSCODE_ERROR
 
 
 def transcode_album(source, directories, files, lossless_files, formats, explicit_transcode, mktorrent):
@@ -312,9 +324,9 @@ def process_album(directory, do_transcode, explicit_transcode, transcode_formats
 
 
 def parse_args():
-    description = '(Version ' + __version__ + ') Transcode albums and create torrents in one command. Default ' \
-                                              'behavior can be changed by opening %(prog)s with a text editor and ' \
-                                              'changing the variables at the top of the file.'
+    description = '(Version {}) Transcode albums and create torrents in one command. Default behavior can be changed ' \
+                  'by opening %(prog)s with a text editor and changing the variables at the top of the file.' \
+        .format(__version__)
 
     parser = argparse.ArgumentParser(description=description)
     transcode_group = parser.add_mutually_exclusive_group()
@@ -398,4 +410,6 @@ def main(args):
 
 
 main(parse_args())
+if exit_code != 0:
+    print('An error occurred, exiting with code {}'.format(exit_code))
 sys.exit(exit_code)
