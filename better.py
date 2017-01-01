@@ -90,7 +90,7 @@ LOSSLESS_EXT = {'flac', 'wav', 'm4a'}
 LOSSY_EXT = {'mp3', 'aac', 'opus', 'ogg', 'vorbis'}
 
 # The version number
-__version__ = '0.4 dev'
+__version__ = '0.4'
 
 exit_code = 0
 FILE_NOT_FOUND = 1 << 0
