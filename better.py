@@ -48,7 +48,7 @@ torrent_command = None
 # replacements are as follows:
 # {0}: The input file (*.flac)
 # {1}: The output file (*.mp3 or *.m4a)
-ffmpeg = 'ffmpeg '
+ffmpeg = 'ffmpeg -threads 1 '
 transcode_commands = {
     'alac': ffmpeg + '-i {0} -acodec alac {1}',
     '320': ffmpeg + '-i {0} -acodec libmp3lame -ab 320k {1}',
@@ -70,7 +70,8 @@ extensions = {
 # brackets belongs in codecs so it can be matched and replaced with the
 # transcode codec type.
 codecs = {
-    'flac', 'flac 16-44', 'flac 16-48', 'flac 24-44', 'flac 24-48',
+    'flac', 'flac 24bit', 'flac 16-44', 'flac 16-48', 'flac 24-44', 'flac 24-48', 'flac 24-96', 'flac 24-196',
+    '16-44', '16-48', '24-44', '24-48', '24-96', '24-196',
     'alac',
     '320', '256', '224', '192',
     'v0', 'apx', '256 vbr', 'v1', '224 vbr', 'v2', 'aps', '192 vbr'
@@ -81,10 +82,10 @@ codecs = {
 LOSSLESS_EXT = {'flac', 'wav', 'm4a'}
 
 # The list of lossy file extensions
-LOSSY_EXT = {'mp3', 'aac'}
+LOSSY_EXT = {'mp3', 'aac', 'opus', 'ogg', 'vorbis'}
 
 # The version number
-__version__ = '0.3'
+__version__ = '0.4 dev'
 
 exit_code = 0
 FILE_NOT_FOUND = 1 << 0
@@ -171,6 +172,7 @@ def make_torrent(directory, output, announce_url):
         exit_code |= TORRENT_ERROR
 
 
+# noinspection PyUnresolvedReferences
 def transcode_files(src, dst, files, command, extension):
     global exit_code
     remaining = files[:]
@@ -184,10 +186,12 @@ def transcode_files(src, dst, files, command, extension):
 
         for i in range(len(threads)):
             if threads[i] is None or threads[i].poll() is not None:
-                if threads[i] is not None and threads[i].poll() != 0:
-                    print('Error transcoding, process exited with code {}'.format(threads[i].poll()))
-                    print('stderr output...')
-                    print(str(threads[i].communicate()[1], encoding='UTF-8'))
+                if threads[i] is not None:
+                    if threads[i].poll() != 0:
+                        print('Error transcoding, process exited with code {}'.format(threads[i].poll()))
+                        print('stderr output...')
+                        print(threads[i].communicate()[1].encode('utf-8', 'surrogateescape').decode('utf-8', 'ignore'))
+                    threads[i].kill()
 
                 threads[i] = None
 
@@ -197,9 +201,13 @@ def transcode_files(src, dst, files, command, extension):
                     transcoded.append(dst + '/' + file[:file.rfind('.') + 1] + extension)
                     threads[i] = subprocess.Popen(
                         format_command(command, src + '/' + file, transcoded[-1]), stdin=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, shell=True
+                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, shell=True, universal_newlines=True
                     )
-                    print('Transcoding {} ({} remaining)'.format(file, len(remaining)))
+                    print(
+                        'Transcoding {} ({} remaining)'.format(file, len(remaining)).encode(
+                            'utf-8', 'surrogateescape'
+                        ).decode('utf-8', 'ignore')
+                    )
             else:
                 transcoding = True
 

@@ -1,3 +1,9 @@
+0.4
+Fixed crash caused by special characters in filenames (e.g. ö)
+Added '-threads 1' to ffmpeg argument
+Ensured threads are killed after completion
+Added some formats to the codecs set
+
 0.3
 Checks transcoded files to see if they exist
 ffmpeg error messages are printed on nonzero exit code
