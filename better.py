@@ -27,6 +27,11 @@ default_transcode = True
 # Whether or not to make .torrent files by default
 default_torrent = True
 
+# The maximum number of threads to maintain. Any number less than 1 means the
+# script will use the number of CPU cores in the system. This is the default
+# value for the -c (--cores) option.
+max_threads = 0
+
 # I prefix torrents I download as FL for Freeleech, UL for Upload, etc. Any
 # prefix in this set will be removed from any transcoded albums and from the
 # resulting torrent files created.
@@ -177,7 +182,7 @@ def transcode_files(src, dst, files, command, extension):
     global exit_code
     remaining = files[:]
     transcoded = []
-    threads = [None] * multiprocessing.cpu_count()
+    threads = [None] * max_threads
 
     transcoding = True
 
@@ -370,6 +375,9 @@ def parse_args():
     parser.add_argument('-f', '--formats', action='store', default=default_formats,
                         help='The comma-separated formats to transcode to (can be of alac,320,v0,v1,v2) '
                              '(default: %(default)s)')
+    parser.add_argument('-c', '--cores', action='store', type=int, default=max_threads,
+                        help='The number of cores to transcode on. Any number below 1 means to use the '
+                             'number of CPU cores in the system (default: %(default)s)')
 
     parser.add_argument('-o', '--torrent-output', action='store', default=torrent_output,
                         help='The directory to store any created .torrent files (default: %(default)s)')
@@ -380,7 +388,7 @@ def parse_args():
 
 
 def main(args):
-    global exit_code, announce, torrent_output, transcode_output
+    global exit_code, announce, torrent_output, transcode_output, max_threads
 
     announce = args.announce
 
@@ -397,6 +405,10 @@ def main(args):
 
     torrent_output = args.torrent_output
     transcode_output = args.transcode_output
+
+    max_threads = args.cores
+    if max_threads < 1:
+        max_threads = multiprocessing.cpu_count()
 
     if not os.path.isdir(torrent_output):
         print('The given torrent output dir ({}) is not a directory'.format(torrent_output))

@@ -3,6 +3,7 @@ Fixed crash caused by special characters in filenames (e.g. ö)
 Added '-threads 1' to ffmpeg argument
 Ensured threads are killed after completion
 Added some formats to the codecs set
+Added -c (--cores) argument to limit the number of threads to transcode on
 
 0.3
 Checks transcoded files to see if they exist
