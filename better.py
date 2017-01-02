@@ -196,7 +196,10 @@ def transcode_files(src, dst, files, command, extension):
                         print('Error transcoding, process exited with code {}'.format(threads[i].poll()))
                         print('stderr output...')
                         print(threads[i].communicate()[1].encode('utf-8', 'surrogateescape').decode('utf-8', 'ignore'))
-                    threads[i].kill()
+                    try:
+                        threads[i].kill()
+                    except _:
+                        pass
 
                 threads[i] = None
 
