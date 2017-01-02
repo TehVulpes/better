@@ -198,7 +198,7 @@ def transcode_files(src, dst, files, command, extension):
                         print(threads[i].communicate()[1].encode('utf-8', 'surrogateescape').decode('utf-8', 'ignore'))
                     try:
                         threads[i].kill()
-                    except _:
+                    except Exception as _:
                         pass
 
                 threads[i] = None
