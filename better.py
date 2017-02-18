@@ -55,6 +55,8 @@ torrent_command = None
 # {1}: The output file (*.mp3 or *.m4a)
 ffmpeg = 'ffmpeg -threads 1 '
 transcode_commands = {
+    '16-48': ffmpeg + '-i {0} -acodec flac -sample_fmt s16 -ar 48000 {1}',
+    '16-44': ffmpeg + '-i {0} -acodec flac -sample_fmt s16 -ar 44100 {1}',
     'alac': ffmpeg + '-i {0} -acodec alac {1}',
     '320': ffmpeg + '-i {0} -acodec libmp3lame -ab 320k {1}',
     'v0': ffmpeg + '-i {0} -qscale:a 0 {1}',
@@ -64,6 +66,8 @@ transcode_commands = {
 
 # extensions maps each codec type to the extension it should use
 extensions = {
+    '16-48': 'flac',
+    '16-44': 'flac',
     'alac': 'm4a',
     '320': 'mp3',
     'v0': 'mp3',
@@ -75,6 +79,7 @@ extensions = {
 # brackets belongs in codecs so it can be matched and replaced with the
 # transcode codec type.
 codecs = {
+    'wav',
     'flac', 'flac 24bit', 'flac 16-44', 'flac 16-48', 'flac 24-44', 'flac 24-48', 'flac 24-96', 'flac 24-196',
     '16-44', '16-48', '24-44', '24-48', '24-96', '24-196',
     'alac',
@@ -90,7 +95,7 @@ LOSSLESS_EXT = {'flac', 'wav', 'm4a'}
 LOSSY_EXT = {'mp3', 'aac', 'opus', 'ogg', 'vorbis'}
 
 # The version number
-__version__ = '0.4'
+__version__ = '0.5'
 
 exit_code = 0
 FILE_NOT_FOUND = 1 << 0
@@ -137,8 +142,73 @@ def format_command(command, *args):
     return command.format(*safe_args)
 
 
+# This version of "which" comes directly from the sources for Python 3.6. It's
+# included here for users of Python 3.2 or older.
+def which(cmd, mode=os.F_OK | os.X_OK, path=None):
+    """Given a command, mode, and a PATH string, return the path which
+    conforms to the given mode on the PATH, or None if there is no such
+    file.
+
+    `mode` defaults to os.F_OK | os.X_OK. `path` defaults to the result
+    of os.environ.get("PATH"), or can be overridden with a custom search
+    path.
+
+    """
+    # Check that a given file can be accessed with the correct mode.
+    # Additionally check that `file` is not a directory, as on Windows
+    # directories pass the os.access check.
+    def _access_check(fn, mode):
+        return (os.path.exists(fn) and os.access(fn, mode)
+                and not os.path.isdir(fn))
+
+    # If we're given a path with a directory part, look it up directly rather
+    # than referring to PATH directories. This includes checking relative to the
+    # current directory, e.g. ./script
+    if os.path.dirname(cmd):
+        if _access_check(cmd, mode):
+            return cmd
+        return None
+
+    if path is None:
+        path = os.environ.get("PATH", os.defpath)
+    if not path:
+        return None
+    path = path.split(os.pathsep)
+
+    if sys.platform == "win32":
+        # The current directory takes precedence on Windows.
+        if not os.curdir in path:
+            path.insert(0, os.curdir)
+
+        # PATHEXT is necessary to check on Windows.
+        pathext = os.environ.get("PATHEXT", "").split(os.pathsep)
+        # See if the given file matches any of the expected path extensions.
+        # This will allow us to short circuit when given "python.exe".
+        # If it does match, only test that one, otherwise we have to try
+        # others.
+        if any(cmd.lower().endswith(ext.lower()) for ext in pathext):
+            files = [cmd]
+        else:
+            files = [cmd + ext for ext in pathext]
+    else:
+        # On other platforms you don't have things like PATHEXT to tell you
+        # what file suffixes are executable, so just pass on cmd as-is.
+        files = [cmd]
+
+    seen = set()
+    for dir in path:
+        normdir = os.path.normcase(dir)
+        if not normdir in seen:
+            seen.add(normdir)
+            for thefile in files:
+                name = os.path.join(dir, thefile)
+                if _access_check(name, mode):
+                    return name
+    return None
+
+
 def command_exists(command):
-    return shutil.which(shlex.split(command)[0]) is not None
+    return which(shlex.split(command)[0]) is not None
 
 
 def find_torrent_command(commands):
@@ -376,7 +446,7 @@ def parse_args():
                                help='Ensures no .torrent files are created' + postfixes['M'])
 
     parser.add_argument('-f', '--formats', action='store', default=default_formats,
-                        help='The comma-separated formats to transcode to (can be of alac,320,v0,v1,v2) '
+                        help='The comma-separated formats to transcode to (can be of 16-48,16-44,alac,320,v0,v1,v2) '
                              '(default: %(default)s)')
     parser.add_argument('-c', '--cores', action='store', type=int, default=max_threads,
                         help='The number of cores to transcode on. Any number below 1 means to use the '

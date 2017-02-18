@@ -1,3 +1,8 @@
+0.5
+Added new transcode formats (16-44 for 16-bit 44.1 kHz and 16-48 for 16-bit 48 kHz)
+Removed usage of shutil.which for Python < 3.3
+Added ability to recognize WAV in the folder name
+
 0.4
 Fixed crash caused by special characters in filenames (e.g. ö)
 Added '-threads 1' to ffmpeg argument
