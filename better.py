@@ -8,6 +8,7 @@ import re
 import multiprocessing
 import time
 import argparse
+import json
 
 # Your unique announce URL
 announce = ''
@@ -53,15 +54,23 @@ torrent_command = None
 # replacements are as follows:
 # {0}: The input file (*.flac)
 # {1}: The output file (*.mp3 or *.m4a)
+# {2}: Song title
+# {3}: Artist
+# {4}: Album
+# {5}: date
+# {6}: track number
 ffmpeg = 'ffmpeg -threads 1 '
 transcode_commands = {
     '16-48': ffmpeg + '-i {0} -acodec flac -sample_fmt s16 -ar 48000 {1}',
     '16-44': ffmpeg + '-i {0} -acodec flac -sample_fmt s16 -ar 44100 {1}',
     'alac': ffmpeg + '-i {0} -acodec alac {1}',
     '320': ffmpeg + '-i {0} -acodec libmp3lame -ab 320k {1}',
-    'v0': ffmpeg + '-i {0} -qscale:a 0 {1}',
-    'v1': ffmpeg + '-i {0} -qscale:a 1 {1}',
-    'v2': ffmpeg + '-i {0} -qscale:a 2 {1}'
+    # 'v0': ffmpeg + '-i {0} -acodec libmp3lame -qscale:a 0 {1}',
+    # 'v1': ffmpeg + '-i {0} -acodec libmp3lame -qscale:a 1 {1}',
+    # 'v2': ffmpeg + '-i {0} -acodec libmp3lame -qscale:a 2 {1}'
+    'v0': 'flac --decode --stdout {0} | lame -V 0 -q 0 --add-id3v2 --tt {2} --ta {3} --tl {4} --ty {5} --tn {6} - {1}',
+    'v1': 'flac --decode --stdout {0} | lame -V 1 -q 0 --add-id3v2 --tt {2} --ta {3} --tl {4} --ty {5} --tn {6} - {1}',
+    'v2': 'flac --decode --stdout {0} | lame -V 2 -q 0 --add-id3v2 --tt {2} --ta {3} --tl {4} --ty {5} --tn {6} - {1}'
 }
 
 # extensions maps each codec type to the extension it should use
@@ -95,7 +104,7 @@ LOSSLESS_EXT = {'flac', 'wav', 'm4a'}
 LOSSY_EXT = {'mp3', 'aac', 'opus', 'ogg', 'vorbis'}
 
 # The version number
-__version__ = '0.5'
+__version__ = '0.6'
 
 exit_code = 0
 FILE_NOT_FOUND = 1 << 0
@@ -247,6 +256,24 @@ def make_torrent(directory, output, announce_url):
         exit_code |= TORRENT_ERROR
 
 
+def get_tags(filename):
+    command = 'ffprobe -v 0 -print_format json -show_format'.split(' ') + [filename]
+    info = json.loads(subprocess.Popen(command, stdout=subprocess.PIPE).communicate()[0])
+
+    tags = info['format']['tags']
+    tags = {key.lower(): tags[key] for key in tags}
+    parsed = {'title': '', 'artist': '', 'album': '', 'date': '', 'track': ''}
+
+    for key in tags:
+        if key in parsed:
+            parsed[key] = tags[key]
+
+    if len(parsed['track']) > 0 and 'tracktotal' in tags and len(tags['tracktotal']) > 0:
+        parsed['track'] += '/' + tags['tracktotal']
+
+    return parsed['title'], parsed['artist'], parsed['album'], parsed['date'], parsed['track']
+
+
 # noinspection PyUnresolvedReferences
 def transcode_files(src, dst, files, command, extension):
     global exit_code
@@ -278,8 +305,9 @@ def transcode_files(src, dst, files, command, extension):
                     file = remaining.pop()
                     transcoded.append(dst + '/' + file[:file.rfind('.') + 1] + extension)
                     threads[i] = subprocess.Popen(
-                        format_command(command, src + '/' + file, transcoded[-1]), stdin=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, shell=True, universal_newlines=True
+                        format_command(command, src + '/' + file, transcoded[-1], *get_tags(src + '/' + file)),
+                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, shell=True,
+                        universal_newlines=True
                     )
                     print(
                         'Transcoding {} ({} remaining)'.format(file, len(remaining)).encode(
