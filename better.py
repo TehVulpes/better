@@ -227,7 +227,7 @@ def copy_album_art(source, dest):
 
     if len(flac.pictures) > 0:
         # noinspection PyUnresolvedReferences
-        apic = mutagen.id3.APIC(data=flac.pictures[0].data)
+        apic = mutagen.id3.APIC(mime=flac.pictures[0].mime, data=flac.pictures[0].data)
 
         mp3 = mutagen.File(dest)
         mp3.tags.add(apic)
