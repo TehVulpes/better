@@ -205,6 +205,9 @@ def get_tags(filename):
     command = 'ffprobe -v 0 -print_format json -show_format'.split(' ') + [filename]
     info = json.loads(to_str(subprocess.Popen(command, stdout=subprocess.PIPE).communicate()[0]))
 
+    if 'format' not in info or 'tags' not in info['format']:
+        return '', '', '', '', ''
+
     tags = info['format']['tags']
     tags = {key.lower(): tags[key] for key in tags}
     parsed = {'title': '', 'artist': '', 'album': '', 'date': '', 'track': ''}
