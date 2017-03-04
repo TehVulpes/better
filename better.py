@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-import os
-import subprocess
-import shlex
-import shutil
-import sys
-import re
-import multiprocessing
-import time
 import argparse
 import json
+import multiprocessing
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import time
 
 # Your unique announce URL
 announce = ''
@@ -65,9 +65,6 @@ transcode_commands = {
     '16-44': ffmpeg + '-i {0} -acodec flac -sample_fmt s16 -ar 44100 {1}',
     'alac': ffmpeg + '-i {0} -acodec alac {1}',
     '320': ffmpeg + '-i {0} -acodec libmp3lame -ab 320k {1}',
-    # 'v0': ffmpeg + '-i {0} -acodec libmp3lame -qscale:a 0 {1}',
-    # 'v1': ffmpeg + '-i {0} -acodec libmp3lame -qscale:a 1 {1}',
-    # 'v2': ffmpeg + '-i {0} -acodec libmp3lame -qscale:a 2 {1}'
     'v0': 'flac --decode --stdout {0} | lame -V 0 -q 0 --add-id3v2 --tt {2} --ta {3} --tl {4} --ty {5} --tn {6} - {1}',
     'v1': 'flac --decode --stdout {0} | lame -V 1 -q 0 --add-id3v2 --tt {2} --ta {3} --tl {4} --ty {5} --tn {6} - {1}',
     'v2': 'flac --decode --stdout {0} | lame -V 2 -q 0 --add-id3v2 --tt {2} --ta {3} --tl {4} --ty {5} --tn {6} - {1}'
@@ -152,27 +149,12 @@ def format_command(command, *args):
 
 
 # This version of "which" comes directly from the sources for Python 3.6. It's
-# included here for users of Python 3.2 or older.
+# included here for users of Python 3.2 or older. Comments stripped for brevity
 def which(cmd, mode=os.F_OK | os.X_OK, path=None):
-    """Given a command, mode, and a PATH string, return the path which
-    conforms to the given mode on the PATH, or None if there is no such
-    file.
-
-    `mode` defaults to os.F_OK | os.X_OK. `path` defaults to the result
-    of os.environ.get("PATH"), or can be overridden with a custom search
-    path.
-
-    """
-    # Check that a given file can be accessed with the correct mode.
-    # Additionally check that `file` is not a directory, as on Windows
-    # directories pass the os.access check.
-    def _access_check(fn, mode):
-        return (os.path.exists(fn) and os.access(fn, mode)
+    def _access_check(fn, _mode):
+        return (os.path.exists(fn) and os.access(fn, _mode)
                 and not os.path.isdir(fn))
 
-    # If we're given a path with a directory part, look it up directly rather
-    # than referring to PATH directories. This includes checking relative to the
-    # current directory, e.g. ./script
     if os.path.dirname(cmd):
         if _access_check(cmd, mode):
             return cmd
@@ -185,32 +167,24 @@ def which(cmd, mode=os.F_OK | os.X_OK, path=None):
     path = path.split(os.pathsep)
 
     if sys.platform == "win32":
-        # The current directory takes precedence on Windows.
-        if not os.curdir in path:
+        if os.curdir not in path:
             path.insert(0, os.curdir)
 
-        # PATHEXT is necessary to check on Windows.
         pathext = os.environ.get("PATHEXT", "").split(os.pathsep)
-        # See if the given file matches any of the expected path extensions.
-        # This will allow us to short circuit when given "python.exe".
-        # If it does match, only test that one, otherwise we have to try
-        # others.
         if any(cmd.lower().endswith(ext.lower()) for ext in pathext):
             files = [cmd]
         else:
             files = [cmd + ext for ext in pathext]
     else:
-        # On other platforms you don't have things like PATHEXT to tell you
-        # what file suffixes are executable, so just pass on cmd as-is.
         files = [cmd]
 
     seen = set()
-    for dir in path:
-        normdir = os.path.normcase(dir)
-        if not normdir in seen:
+    for _dir in path:
+        normdir = os.path.normcase(_dir)
+        if normdir not in seen:
             seen.add(normdir)
             for thefile in files:
-                name = os.path.join(dir, thefile)
+                name = os.path.join(_dir, thefile)
                 if _access_check(name, mode):
                     return name
     return None
@@ -226,6 +200,13 @@ def find_torrent_command(commands):
             return command
 
     return None
+
+
+def to_str(data):
+    if type(data) is str:
+        return to_str(data.encode('utf-8', 'surrogateescape'))
+    else:
+        return data.decode('utf-8', 'ignore')
 
 
 def copy_contents(src, dst, dirs, files):
@@ -258,7 +239,7 @@ def make_torrent(directory, output, announce_url):
 
 def get_tags(filename):
     command = 'ffprobe -v 0 -print_format json -show_format'.split(' ') + [filename]
-    info = json.loads(subprocess.Popen(command, stdout=subprocess.PIPE).communicate()[0])
+    info = json.loads(to_str(subprocess.Popen(command, stdout=subprocess.PIPE).communicate()[0]))
 
     tags = info['format']['tags']
     tags = {key.lower(): tags[key] for key in tags}
@@ -292,7 +273,8 @@ def transcode_files(src, dst, files, command, extension):
                     if threads[i].poll() != 0:
                         print('Error transcoding, process exited with code {}'.format(threads[i].poll()))
                         print('stderr output...')
-                        print(threads[i].communicate()[1].encode('utf-8', 'surrogateescape').decode('utf-8', 'ignore'))
+                        print(to_str(threads[i].communicate()[1]))
+                    # noinspection PyBroadException
                     try:
                         threads[i].kill()
                     except Exception as _:
@@ -309,11 +291,7 @@ def transcode_files(src, dst, files, command, extension):
                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, shell=True,
                         universal_newlines=True
                     )
-                    print(
-                        'Transcoding {} ({} remaining)'.format(file, len(remaining)).encode(
-                            'utf-8', 'surrogateescape'
-                        ).decode('utf-8', 'ignore')
-                    )
+                    print(to_str('Transcoding {} ({} remaining)'.format(file, len(remaining))))
             else:
                 transcoding = True
 
