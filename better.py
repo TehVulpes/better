@@ -10,6 +10,12 @@ import subprocess
 import sys
 import time
 
+# noinspection PyBroadException
+try:
+    import mutagen
+except:
+    mutagen = None
+
 # Your unique announce URL
 announce = ''
 
@@ -101,7 +107,7 @@ LOSSLESS_EXT = {'flac', 'wav', 'm4a'}
 LOSSY_EXT = {'mp3', 'aac', 'opus', 'ogg', 'vorbis'}
 
 # The version number
-__version__ = '0.6'
+__version__ = '0.7'
 
 exit_code = 0
 FILE_NOT_FOUND = 1 << 0
@@ -144,50 +150,8 @@ def enumerate_contents(directory):
 
 
 def format_command(command, *args):
-    safe_args = [shlex.quote(arg) for arg in args]
+    safe_args = [quote(arg) for arg in args]
     return command.format(*safe_args)
-
-
-# This version of "which" comes directly from the sources for Python 3.6. It's
-# included here for users of Python 3.2 or older. Comments stripped for brevity
-def which(cmd, mode=os.F_OK | os.X_OK, path=None):
-    def _access_check(fn, _mode):
-        return (os.path.exists(fn) and os.access(fn, _mode)
-                and not os.path.isdir(fn))
-
-    if os.path.dirname(cmd):
-        if _access_check(cmd, mode):
-            return cmd
-        return None
-
-    if path is None:
-        path = os.environ.get("PATH", os.defpath)
-    if not path:
-        return None
-    path = path.split(os.pathsep)
-
-    if sys.platform == "win32":
-        if os.curdir not in path:
-            path.insert(0, os.curdir)
-
-        pathext = os.environ.get("PATHEXT", "").split(os.pathsep)
-        if any(cmd.lower().endswith(ext.lower()) for ext in pathext):
-            files = [cmd]
-        else:
-            files = [cmd + ext for ext in pathext]
-    else:
-        files = [cmd]
-
-    seen = set()
-    for _dir in path:
-        normdir = os.path.normcase(_dir)
-        if normdir not in seen:
-            seen.add(normdir)
-            for thefile in files:
-                name = os.path.join(_dir, thefile)
-                if _access_check(name, mode):
-                    return name
-    return None
 
 
 def command_exists(command):
@@ -255,12 +219,28 @@ def get_tags(filename):
     return parsed['title'], parsed['artist'], parsed['album'], parsed['date'], parsed['track']
 
 
+def copy_album_art(source, dest):
+    if mutagen is None:
+        return
+
+    flac = mutagen.File(source)
+
+    if len(flac.pictures) > 0:
+        # noinspection PyUnresolvedReferences
+        apic = mutagen.id3.APIC(data=flac.pictures[0].data)
+
+        mp3 = mutagen.File(dest)
+        mp3.tags.add(apic)
+        mp3.save()
+
+
 # noinspection PyUnresolvedReferences
 def transcode_files(src, dst, files, command, extension):
     global exit_code
     remaining = files[:]
     transcoded = []
     threads = [None] * max_threads
+    filenames = []
 
     transcoding = True
 
@@ -288,9 +268,10 @@ def transcode_files(src, dst, files, command, extension):
                     transcoded.append(dst + '/' + file[:file.rfind('.') + 1] + extension)
                     threads[i] = subprocess.Popen(
                         format_command(command, src + '/' + file, transcoded[-1], *get_tags(src + '/' + file)),
-                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, shell=True,
+                        stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True,
                         universal_newlines=True
                     )
+                    filenames.append((src + '/' + file, transcoded[-1]))
                     print(to_str('Transcoding {} ({} remaining)'.format(file, len(remaining))))
             else:
                 transcoding = True
@@ -304,6 +285,12 @@ def transcode_files(src, dst, files, command, extension):
         elif os.path.getsize(file) == 0:
             print('An error occurred and {} is empty'.format(file))
             exit_code |= TRANSCODE_ERROR
+
+    try:
+        for pair in filenames:
+            copy_album_art(*pair)
+    except:
+        pass
 
 
 def transcode_album(source, directories, files, lossless_files, formats, explicit_transcode, mktorrent):
@@ -481,6 +468,11 @@ def main(args):
 
     if not explicit_torrent and len(announce) == 0:
         do_torrent = False
+    if mutagen is None and 'v0' in formats:
+        print('Mutagen is not installed; album art won\'t be copied to VBR transcodes')
+        print('To keep album art, install mutagen (try "sudo python3 -m pip install mutagen")')
+        if sys.version_info[1] < 4:
+            print('Your python version is <3.4, you must install pip yourself before mutagen.')
 
     torrent_output = args.torrent_output
     transcode_output = args.transcode_output
@@ -508,6 +500,63 @@ def main(args):
 
         print('Processing ' + album)
         process_album(album, do_transcode, explicit_transcode, formats, do_torrent, explicit_torrent, original_torrent)
+
+
+#
+# The following functions are copied for use in older version of Python. They
+# are standard library functions in Python >3.2 that don't exist in 3.2 itself.
+#
+_find_unsafe = re.compile(r'[^\w@%+=:,./-]', re.ASCII).search
+
+
+def quote(s):
+    """Return a shell-escaped version of the string *s*."""
+    if not s:
+        return "''"
+    if _find_unsafe(s) is None:
+        return s
+
+    return "'" + s.replace("'", "'\"'\"'") + "'"
+
+
+def which(cmd, mode=os.F_OK | os.X_OK, path=None):
+    def _access_check(fn, _mode):
+        return (os.path.exists(fn) and os.access(fn, _mode)
+                and not os.path.isdir(fn))
+
+    if os.path.dirname(cmd):
+        if _access_check(cmd, mode):
+            return cmd
+        return None
+
+    if path is None:
+        path = os.environ.get("PATH", os.defpath)
+    if not path:
+        return None
+    path = path.split(os.pathsep)
+
+    if sys.platform == "win32":
+        if os.curdir not in path:
+            path.insert(0, os.curdir)
+
+        pathext = os.environ.get("PATHEXT", "").split(os.pathsep)
+        if any(cmd.lower().endswith(ext.lower()) for ext in pathext):
+            files = [cmd]
+        else:
+            files = [cmd + ext for ext in pathext]
+    else:
+        files = [cmd]
+
+    seen = set()
+    for _dir in path:
+        normdir = os.path.normcase(_dir)
+        if normdir not in seen:
+            seen.add(normdir)
+            for thefile in files:
+                name = os.path.join(_dir, thefile)
+                if _access_check(name, mode):
+                    return name
+    return None
 
 
 main(parse_args())

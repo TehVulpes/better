@@ -1,5 +1,10 @@
+0.7
+Added optional dependency to mutagen
+Now testing all builds on Python 3.2 - 3.6
+Script now copies album art via mutagen
+
 0.6
-Copied Python 3.6 definition of 'shutil.which' for users of Python <3.2
+Copied Python 3.6 definition of 'shutil.which' for users of Python <=3.2
 Added dependencies 'flac' and 'lame'
 fixed issue where media encoder wasn't being written in tags
 
